@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KDKMP PARANG — Dashboard Penjualan, Stok & Logistik</title>
+  <meta name="description" content="Sistem Informasi Terpadu KDKMP Parang untuk pemantauan penjualan, stok opname, harga, dan manajemen faktur logistik terintegrasi Google Spreadsheet dan Google Drive.">
+  <meta name="theme-color" content="#0d1117">
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <!-- SheetJS (xlsx) for client-side Excel Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Chart.js 4.x for Modern Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <!-- APP CONTAINER (HIDDEN UNTIL AUTHENTICATED) -->
+  <div id="app" class="app-layout" style="display: none;">
+    
+    <!-- SIDEBAR (DESKTOP) & DRAWER (MOBILE) -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <div class="logo-icon">
+            <i class="fa-solid fa-boxes-stacked"></i>
+          </div>
+          <div class="brand-info">
+            <h1 class="brand-title">KDKMP PARANG</h1>
+            <span class="brand-subtitle">Smart Logistics & Sales</span>
+          </div>
+        </div>
+        <button id="sidebarToggleBtn" class="sidebar-toggle" title="Ciutkan Sidebar" aria-label="Toggle Sidebar">
+          <i class="fa-solid fa-angles-left"></i>
+        </button>
+      </div>
+
+      <!-- Live Sync Status Widget in Sidebar -->
+      <div class="sidebar-sync-card">
+        <div class="sync-indicator">
+          <span class="status-dot" id="liveSyncDot"></span>
+          <span class="sync-label" id="liveSyncLabel">Database Lokal</span>
+        </div>
+        <p class="sync-timestamp" id="liveSyncTimestamp">Belum disinkronkan</p>
+        <button id="quickSyncBtn" class="btn-quick-sync" title="Sinkronisasi Data">
+          <i class="fa-solid fa-arrows-rotate"></i> Sinkron Sekarang
+        </button>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="sidebar-nav">
+        <ul class="nav-list">
+          <li class="nav-item" data-roles="admin">
+            <button class="nav-link active" data-target="overview" id="nav-overview">
+              <i class="fa-solid fa-chart-pie"></i>
+              <span class="nav-text">Ringkasan Penjualan</span>
+            </button>
+          </li>
+          <li class="nav-item" data-roles="admin">
+            <button class="nav-link" data-target="products" id="nav-products">
+              <i class="fa-solid fa-cube"></i>
+              <span class="nav-text">Daftar Produk</span>
+            </button>
+          </li>
+          <li class="nav-item" data-roles="admin">
+            <button class="nav-link" data-target="producers" id="nav-producers">
+              <i class="fa-solid fa-industry"></i>
+              <span class="nav-text">Analisis Produsen</span>
+            </button>
+          </li>
+          <li class="nav-item" data-roles="admin,asmen">
+            <button class="nav-link" data-target="stock" id="nav-stock">
+              <i class="fa-solid fa-warehouse"></i>
+              <span class="nav-text">Stok Opname</span>
+            </button>
+          </li>
+          <li class="nav-item" data-roles="admin,asmen">
+            <button class="nav-link" data-target="logistics" id="nav-logistics">
+              <i class="fa-solid fa-truck-ramp-box"></i>
+              <span class="nav-text">Faktur & Logistik</span>
+              <span class="nav-badge" id="expiredBadge" style="display: none;">0</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Sidebar Footer / Settings Trigger -->
+      <div class="sidebar-footer" id="sidebarFooterSettings" data-roles="admin">
+        <button id="openSettingsBtn" class="settings-trigger-btn">
+          <i class="fa-solid fa-gear"></i>
+          <span class="nav-text">Pengaturan Database</span>
+        </button>
+        <div class="system-tag">
+          <span>v2.6 Multi-Role Active</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- SIDEBAR OVERLAY FOR MOBILE DRAWER -->
+    <div id="drawerOverlay" class="drawer-overlay"></div>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <div class="main-wrapper">
+      
+      <!-- TOP HEADER BAR -->
+      <header class="top-header">
+        <div class="header-left">
+          <button id="mobileMenuBtn" class="btn-icon mobile-menu-btn" aria-label="Buka Menu Navigasi">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <div class="page-title-box">
+            <h2 id="currentPageTitle" class="current-page-title">Ringkasan Penjualan</h2>
+            <p id="currentPageSubtitle" class="current-page-subtitle">Metrik performa penjualan dan pergerakan stok barang</p>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Global Period Filter -->
+          <div class="global-filter-group" id="globalPeriodGroup">
+            <span class="filter-label"><i class="fa-regular fa-calendar"></i> Periode:</span>
+            <div class="segmented-control">
+              <button class="seg-btn active" data-period="all">Semua</button>
+              <button class="seg-btn" data-period="monthly">Bulan Ini</button>
+              <button class="seg-btn" data-period="weekly">Minggu Ini</button>
+              <button class="seg-btn" data-period="daily">Hari Ini</button>
+            </div>
+          </div>
+
+          <!-- User Profile & Logout Widget -->
+          <div class="user-header-widget" id="userHeaderWidget">
+            <div class="user-avatar" id="headerUserAvatar">
+              <i class="fa-solid fa-user-shield"></i>
+            </div>
+            <div class="user-meta">
+              <span class="user-display-name" id="headerUserName">Bpk. Bambang</span>
+              <span class="badge badge-purple user-role-pill" id="headerUserRoleBadge">ADMIN</span>
+            </div>
+            <button id="btnLogout" class="btn-sm btn-outline-danger user-logout-btn" title="Keluar / Logout dari Sistem">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> <span class="hide-mobile">Keluar</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEW CONTAINER (SPA SECTIONS) -->
+      <main id="mainContainer" class="main-content">
+
+        <!-- ============================================== -->
+        <!-- SECTION 1: RINGKASAN PENJUALAN (OVERVIEW)     -->
+        <!-- ============================================== -->
+        <section id="section-overview" class="spa-section active">
+          
+          <!-- KPI Cards Grid -->
+          <div class="kpi-grid">
+            <div class="kpi-card card-revenue">
+              <div class="kpi-icon-box">
+                <i class="fa-solid fa-wallet"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Total Pendapatan</span>
+                <h3 class="kpi-value" id="kpiTotalRevenue">Rp 0</h3>
+                <span class="kpi-subtext" id="kpiRevenueSubtext">Kalkulasi delta stok × harga</span>
+              </div>
+            </div>
+
+            <div class="kpi-card card-sales-qty">
+              <div class="kpi-icon-box">
+                <i class="fa-solid fa-cart-shopping"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Total Qty Terjual</span>
+                <h3 class="kpi-value" id="kpiTotalQty">0 <span class="unit">pcs</span></h3>
+                <span class="kpi-subtext" id="kpiQtySubtext">Rata-rata: 0 pcs / hari</span>
+              </div>
+            </div>
+
+            <div class="kpi-card card-active-products">
+              <div class="kpi-icon-box">
+                <i class="fa-solid fa-layer-group"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Produk Aktif Terjual</span>
+                <h3 class="kpi-value" id="kpiActiveProducts">0 <span class="unit">item</span></h3>
+                <span class="kpi-subtext" id="kpiActiveProductsSubtext">Dari 0 produk terdaftar</span>
+              </div>
+            </div>
+
+            <div class="kpi-card card-daily-avg">
+              <div class="kpi-icon-box">
+                <i class="fa-solid fa-money-bill-trend-up"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Rata-rata Omset Harian</span>
+                <h3 class="kpi-value" id="kpiDailyAvg">Rp 0</h3>
+                <span class="kpi-subtext" id="kpiDailyAvgSubtext">Berdasarkan hari transaksi aktif</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row 1: Line Trend & Top 5 Doughnut -->
+          <div class="charts-grid-2">
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title"><i class="fa-solid fa-chart-line"></i> Tren Pendapatan Penjualan</h4>
+                  <p class="chart-desc" id="trendSubtitle">Grafik pendapatan dari waktu ke waktu</p>
+                </div>
+                <div class="chart-badge" id="trendGroupByBadge">Harian</div>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartRevenueTrend"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title"><i class="fa-solid fa-chart-pie"></i> Top 5 Produk Terlaris</h4>
+                  <p class="chart-desc">Kontribusi 5 produk dengan omset tertinggi</p>
+                </div>
+              </div>
+              <div class="chart-body chart-body-donut">
+                <canvas id="chartTopProducts"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row 2: Producer Revenue & Qty Sold Bar -->
+          <div class="charts-grid-2">
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title"><i class="fa-solid fa-chart-column"></i> Pendapatan per Produsen</h4>
+                  <p class="chart-desc">Perbandingan omset masing-masing supplier/brand</p>
+                </div>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartProducerRevenue"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title"><i class="fa-solid fa-cubes-stacked"></i> Tren Kuantitas Terjual (Pcs)</h4>
+                  <p class="chart-desc">Volume barang yang keluar dari toko/gudang</p>
+                </div>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartQtyTrend"></canvas>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ============================================== -->
+        <!-- SECTION 2: DAFTAR PRODUK (PRODUCTS)           -->
+        <!-- ============================================== -->
+        <section id="section-products" class="spa-section">
+          
+          <!-- Filter & Search Toolbar -->
+          <div class="table-toolbar">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="productSearchInput" placeholder="Cari nama produk...">
+            </div>
+
+            <div class="toolbar-filters">
+              <div class="filter-select-box">
+                <label for="productProducerFilter">Produsen:</label>
+                <select id="productProducerFilter">
+                  <option value="">Semua Produsen</option>
+                </select>
+              </div>
+
+              <div class="filter-select-box">
+                <label for="productSortBy">Urutkan:</label>
+                <select id="productSortBy">
+                  <option value="revenue_desc">Pendapatan Terbesar</option>
+                  <option value="revenue_asc">Pendapatan Terkecil</option>
+                  <option value="qty_desc">Qty Terbanyak</option>
+                  <option value="qty_asc">Qty Tersedikit</option>
+                  <option value="name_asc">Nama Produk (A-Z)</option>
+                  <option value="price_desc">Harga Tertinggi</option>
+                </select>
+              </div>
+
+              <button id="exportProductsCsvBtn" class="btn-sm btn-outline" title="Export CSV">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- Product Table Card -->
+          <div class="table-card">
+            <div class="table-responsive">
+              <table class="data-table" id="productsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">No</th>
+                    <th>Nama Produk</th>
+                    <th>Produsen / Supplier</th>
+                    <th class="text-right">Harga Satuan</th>
+                    <th class="text-right">Qty Terjual</th>
+                    <th class="text-right" style="min-width: 170px;">Total Pendapatan</th>
+                    <th class="text-right">Stok Terakhir</th>
+                  </tr>
+                </thead>
+                <tbody id="productsTableBody">
+                  <!-- Populated by app.js -->
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer">
+              <span id="productsCountLabel">Menampilkan 0 produk</span>
+              <div class="pagination-controls" id="productsPagination">
+                <!-- Pagination buttons generated in JS -->
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ============================================== -->
+        <!-- SECTION 3: ANALISIS PRODUSEN (PRODUCERS)      -->
+        <!-- ============================================== -->
+        <section id="section-producers" class="spa-section">
+          
+          <div class="charts-grid-2">
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title"><i class="fa-solid fa-scale-balanced"></i> Perbandingan Omset & Volume</h4>
+                  <p class="chart-desc">Nilai rupiah vs volume kuantitas penjualan tiap produsen</p>
+                </div>
+              </div>
+              <div class="chart-body">
+                <canvas id="chartProducerComparison"></canvas>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-header">
+                <div>
+                  <h4 class="chart-title"><i class="fa-solid fa-chart-pie"></i> Pangsa Omset Produsen</h4>
+                  <p class="chart-desc">Persentase kontribusi omset dari masing-masing brand</p>
+                </div>
+              </div>
+              <div class="chart-body chart-body-donut">
+                <canvas id="chartProducerShare"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Producer Contribution Table -->
+          <div class="table-card">
+            <div class="table-card-header">
+              <h4 class="table-title"><i class="fa-solid fa-table-list"></i> Matriks Kontribusi Produsen</h4>
+              <span class="badge badge-accent" id="totalProducersBadge">0 Produsen Terdaftar</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="producersTable">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">No</th>
+                    <th>Nama Produsen / Distributor</th>
+                    <th class="text-right">Jumlah Varian</th>
+                    <th class="text-right">Total Qty Terjual</th>
+                    <th class="text-right">Total Omset (Rp)</th>
+                    <th style="min-width: 200px;">Pangsa Pendapatan</th>
+                  </tr>
+                </thead>
+                <tbody id="producersTableBody">
+                  <!-- Populated by app.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ============================================== -->
+        <!-- SECTION 4: STOK OPNAME (STOCK)                -->
+        <!-- ============================================== -->
+        <section id="section-stock" class="spa-section">
+          
+          <!-- Stock Controls Bar -->
+          <div class="stock-controls-card">
+            <div class="stock-date-picker-wrap">
+              <label for="stockDateSelect"><i class="fa-solid fa-calendar-check"></i> Pilih Tanggal Stok Opname:</label>
+              <select id="stockDateSelect" class="select-highlight">
+                <option value="">Pilih tanggal opname...</option>
+              </select>
+            </div>
+
+            <div class="stock-search-wrap">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="stockSearchInput" placeholder="Cari nama produk di stok...">
+              </div>
+            </div>
+
+            <div class="stock-quick-actions">
+              <button id="exportStockBtn" class="btn-sm btn-outline">
+                <i class="fa-solid fa-download"></i> Unduh Tabel Stok
+              </button>
+            </div>
+          </div>
+
+          <!-- Stock KPI Summary Cards -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-icon-box color-green">
+                <i class="fa-solid fa-boxes-packing"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Produk Tersedia</span>
+                <h3 class="kpi-value" id="kpiStockTotalProducts">0 <span class="unit">item</span></h3>
+                <span class="kpi-subtext" id="kpiStockAvailableSubtext">Total varian di tanggal terpilih</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon-box color-purple">
+                <i class="fa-solid fa-coins"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Estimasi Nilai Stok</span>
+                <h3 class="kpi-value" id="kpiStockValuation">Rp 0</h3>
+                <span class="kpi-subtext">Total unit × harga satuan</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon-box color-red">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Alert Stok Menipis</span>
+                <h3 class="kpi-value" id="kpiStockLow">0 <span class="unit">item</span></h3>
+                <span class="kpi-subtext">Stok total &le; 5 pcs</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon-box color-blue">
+                <i class="fa-regular fa-calendar-days"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-title">Tanggal Opname Aktif</span>
+                <h3 class="kpi-value" id="kpiStockActiveDate" style="font-size: 1.25rem;">-</h3>
+                <span class="kpi-subtext" id="kpiStockComparisonLabel">Dibandingkan dengan opname sebelumnya</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stock Opname Detailed Table -->
+          <div class="table-card">
+            <div class="table-card-header">
+              <h4 class="table-title"><i class="fa-solid fa-clipboard-list"></i> Rincian Stok Produk Toko & Gudang</h4>
+              <div class="table-header-tags">
+                <span class="badge badge-subtle" id="stockStatusTag">Data Opname</span>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="stockTable">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">No</th>
+                    <th>Nama Produk</th>
+                    <th class="text-right">Stok Toko (Groceries)</th>
+                    <th class="text-right">Stok Gudang (Warehouse)</th>
+                    <th class="text-right">Total Stok</th>
+                    <th class="text-right">Harga Satuan</th>
+                    <th class="text-right">Nilai Inventori</th>
+                    <th class="text-center">Pergerakan Stok</th>
+                  </tr>
+                </thead>
+                <tbody id="stockTableBody">
+                  <!-- Populated by app.js -->
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer">
+              <span id="stockCountLabel">Menampilkan 0 baris data stok</span>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ============================================== -->
+        <!-- SECTION 5: FAKTUR & LOGISTIK (LOGISTICS)      -->
+        <!-- ============================================== -->
+        <section id="section-logistics" class="spa-section">
+          
+          <!-- Sub-Tab Switcher: Form vs Riwayat -->
+          <div class="subnav-container">
+            <div class="subnav-tabs">
+              <button class="subnav-tab active" data-subtab="logistics-history" id="subtab-btn-history">
+                <i class="fa-solid fa-list-check"></i> Riwayat Faktur & Monitoring Expired
+              </button>
+              <button class="subnav-tab" data-subtab="logistics-form" id="subtab-btn-form">
+                <i class="fa-solid fa-plus-circle"></i> Input Penerimaan Barang Baru
+              </button>
+            </div>
+          </div>
+
+          <!-- SUB-VIEW 1: RIWAYAT & MONITORING EXPIRED -->
+          <div id="subtab-logistics-history" class="subtab-view active">
+            
+            <!-- Logistics KPIs -->
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <div class="kpi-icon-box color-blue">
+                  <i class="fa-solid fa-receipt"></i>
+                </div>
+                <div class="kpi-content">
+                  <span class="kpi-title">Total Faktur Diterima</span>
+                  <h3 class="kpi-value" id="kpiLogisticsTotalInvoices">0 <span class="unit">faktur</span></h3>
+                  <span class="kpi-subtext">Tercatat di sistem</span>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-icon-box color-green">
+                  <i class="fa-solid fa-boxes-stacked"></i>
+                </div>
+                <div class="kpi-content">
+                  <span class="kpi-title">Total Unit Barang Diterima</span>
+                  <h3 class="kpi-value" id="kpiLogisticsTotalQty">0 <span class="unit">pcs</span></h3>
+                  <span class="kpi-subtext">Akumulasi kuantitas masuk</span>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-icon-box color-red">
+                  <i class="fa-solid fa-skull-crossbones"></i>
+                </div>
+                <div class="kpi-content">
+                  <span class="kpi-title">Barang Kritis / Mendekati Expired</span>
+                  <h3 class="kpi-value" id="kpiLogisticsExpiringSoon">0 <span class="unit">item</span></h3>
+                  <span class="kpi-subtext">&le; 30 hari atau lewat kedaluwarsa</span>
+                </div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-icon-box color-purple">
+                  <i class="fa-solid fa-truck-fast"></i>
+                </div>
+                <div class="kpi-content">
+                  <span class="kpi-title">Pengiriman Terbaru</span>
+                  <h3 class="kpi-value" id="kpiLogisticsLatestDate" style="font-size: 1.15rem;">-</h3>
+                  <span class="kpi-subtext" id="kpiLogisticsLatestSender">-</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Logistics Filter & Search Toolbar -->
+            <div class="table-toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="logisticsSearchInput" placeholder="Cari No. PO, DO, Pengirim, Sopir...">
+              </div>
+
+              <div class="toolbar-filters">
+                <div class="filter-select-box">
+                  <label for="logisticsExpFilter">Filter Expired:</label>
+                  <select id="logisticsExpFilter">
+                    <option value="all">Semua Status</option>
+                    <option value="critical">Kritis (&le; 30 Hari)</option>
+                    <option value="safe">Aman (> 30 Hari)</option>
+                  </select>
+                </div>
+
+                <button id="btnSwitchToNewForm" class="btn btn-primary">
+                  <i class="fa-solid fa-plus"></i> Input Faktur Baru
+                </button>
+              </div>
+            </div>
+
+            <!-- Invoices Table -->
+            <div class="table-card">
+              <div class="table-card-header">
+                <h4 class="table-title"><i class="fa-solid fa-file-invoice"></i> Daftar Faktur Penerimaan Barang</h4>
+                <span class="badge badge-subtle" id="logisticsCountBadge">0 Faktur</span>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table" id="invoicesTable">
+                  <thead>
+                    <tr>
+                      <th>ID Faktur</th>
+                      <th>Tanggal Diterima</th>
+                      <th>No. PO / No. DO</th>
+                      <th>Pengirim / Distributor</th>
+                      <th>Sopir / Nopol</th>
+                      <th class="text-right">Jenis Barang</th>
+                      <th class="text-right">Total Qty</th>
+                      <th class="text-center">Status Expired</th>
+                      <th class="text-center">Foto Dokumen</th>
+                      <th class="text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoicesTableBody">
+                    <!-- Populated by app.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- SUB-VIEW 2: FORM INPUT PENERIMAAN BARANG BARU -->
+          <div id="subtab-logistics-form" class="subtab-view">
+            <div class="form-card">
+              <div class="form-card-header">
+                <div>
+                  <h3 class="form-title"><i class="fa-solid fa-dolly"></i> Form Input Penerimaan Barang / Faktur Baru</h3>
+                  <p class="form-subtitle">Data dan foto dokumen akan diunggah otomatis ke Google Drive dan dicatat ke Google Sheets.</p>
+                </div>
+                <button type="button" id="btnCancelFormTop" class="btn-sm btn-outline">
+                  <i class="fa-solid fa-arrow-left"></i> Kembali ke Riwayat
+                </button>
+              </div>
+
+              <form id="fakturForm" class="styled-form" novalidate>
+                
+                <!-- SECTION FORM 1: INFORMASI DOKUMEN & PENGIRIMAN -->
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fa-solid fa-file-circle-check"></i> 1. Informasi Dokumen & Ekspedisi
+                  </div>
+                  
+                  <div class="form-grid-3">
+                    <div class="form-group">
+                      <label for="inputNoPo">Nomor PO (Purchase Order) <span class="required">*</span></label>
+                      <input type="text" id="inputNoPo" placeholder="Contoh: PO-KDKMP/2024/09/014" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputNoDo">Nomor DO (Delivery Order) <span class="required">*</span></label>
+                      <input type="text" id="inputNoDo" placeholder="Contoh: DO-WINGS/109283" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputTglDiterima">Tanggal Diterima <span class="required">*</span></label>
+                      <input type="date" id="inputTglDiterima" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputPengirim">Pengirim / Distributor <span class="required">*</span></label>
+                      <input type="text" id="inputPengirim" list="producerSuggestions" placeholder="Pilih atau ketik produsen/distributor" required>
+                      <datalist id="producerSuggestions">
+                        <!-- Populated by JS -->
+                      </datalist>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputNopol">Nomor Polisi Kendaraan</label>
+                      <input type="text" id="inputNopol" placeholder="Contoh: B 9482 UDF">
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputNamaSopir">Nama Sopir Ekspedisi</label>
+                      <input type="text" id="inputNamaSopir" placeholder="Contoh: Bpk. Joko Santoso">
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputKontakSopir">No. HP / WhatsApp Sopir</label>
+                      <input type="tel" id="inputKontakSopir" placeholder="Contoh: 081234567890">
+                    </div>
+
+                    <div class="form-group">
+                      <label for="inputOperatorName"><i class="fa-solid fa-user-check"></i> Petugas Input (Aktif):</label>
+                      <input type="text" id="inputOperatorName" readonly class="form-input" style="background-color: #21262d; color: #58a6ff; font-weight: 600;">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SECTION FORM 2: UPLOAD DOKUMEN FOTO -->
+                <div class="form-section">
+                  <div class="form-section-title">
+                    <i class="fa-solid fa-camera"></i> 2. Upload Bukti Foto (STB & Dokumen Lainnya)
+                  </div>
+                  <p class="form-hint"><i class="fa-solid fa-circle-info"></i> Foto akan dikompresi otomatis oleh browser agar hemat kuota sebelum disimpan di Google Drive.</p>
+
+                  <div class="upload-grid-2">
+                    
+                    <!-- Upload STB (Single File) -->
+                    <div class="upload-box-container">
+                      <label class="upload-label">
+                        <i class="fa-solid fa-receipt"></i> Foto STB (Surat Terima Barang) <span class="required">*</span>
+                      </label>
+                      <div class="drop-zone" id="stbDropZone">
+                        <input type="file" id="stbFileInput" accept="image/*" class="file-input-hidden">
+                        <div class="drop-zone-content" id="stbEmptyState">
+                          <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                          <p class="drop-title">Klik atau seret foto STB ke sini</p>
+                          <span class="drop-desc">Format JPG/PNG/WebP, maksimal 10MB</span>
+                        </div>
+                        <div class="preview-single" id="stbPreviewContainer" style="display: none;">
+                          <img id="stbPreviewImg" src="" alt="Preview STB">
+                          <div class="preview-overlay">
+                            <button type="button" id="btnRemoveStb" class="btn-remove-photo" title="Hapus Foto">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            <span class="preview-filename" id="stbFileName">-</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Upload Dokumen Lainnya (Multiple Files) -->
+                    <div class="upload-box-container">
+                      <label class="upload-label">
+                        <i class="fa-solid fa-images"></i> Foto Dokumen Lainnya (Bisa Lebih dari 1 Foto)
+                      </label>
+                      <div class="drop-zone drop-zone-multiple" id="otherDocsDropZone">
+                        <input type="file" id="otherDocsFileInput" accept="image/*" multiple class="file-input-hidden">
+                        <div class="drop-zone-content">
+                          <i class="fa-solid fa-file-image drop-icon"></i>
+                          <p class="drop-title">Tambah foto dokumen (DO, Surat Jalan, Nota, dll)</p>
+                          <span class="drop-desc">Bisa pilih beberapa foto sekaligus</span>
+                        </div>
+                      </div>
+                      
+                      <!-- Multiple Previews Gallery -->
+                      <div class="multi-preview-gallery" id="otherDocsGallery">
+                        <!-- Populated by JS -->
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- SECTION FORM 3: DAFTAR BARANG YANG DITERIMA (DYNAMIC ROWS) -->
+                <div class="form-section">
+                  <div class="form-section-title-between">
+                    <div class="form-section-title">
+                      <i class="fa-solid fa-boxes-packing"></i> 3. Daftar Rincian Barang yang Diterima
+                    </div>
+                    <button type="button" id="btnAddItemRow" class="btn-sm btn-outline-accent">
+                      <i class="fa-solid fa-plus"></i> Tambah Baris Barang
+                    </button>
+                  </div>
+
+                  <!-- Dynamic Item Table -->
+                  <div class="dynamic-items-container">
+                    <table class="dynamic-table" id="itemsInputTable">
+                      <thead>
+                        <tr>
+                          <th style="width: 40px;">#</th>
+                          <th>Nama Barang <span class="required">*</span></th>
+                          <th style="width: 160px;">Qty Diterima (Pcs) <span class="required">*</span></th>
+                          <th style="width: 200px;">Tanggal Expired (Exp Date)</th>
+                          <th style="width: 50px;" class="text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody id="itemsInputTableBody">
+                        <!-- Rows injected dynamically via JS -->
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- Datalist for Product Autocomplete -->
+                  <datalist id="productListSuggestions">
+                    <!-- Populated from master price list / products in JS -->
+                  </datalist>
+
+                  <!-- Dynamic Table Summary Card -->
+                  <div class="items-summary-bar">
+                    <div class="summary-item">
+                      <span class="summary-label">Total Jenis Barang:</span>
+                      <strong class="summary-val" id="summaryTotalItems">0 item</strong>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">Total Kuantitas:</span>
+                      <strong class="summary-val" id="summaryTotalQty">0 pcs</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- FORM SUBMIT BUTTONS -->
+                <div class="form-actions-bar">
+                  <button type="button" id="btnCancelForm" class="btn btn-outline">
+                    Batal
+                  </button>
+                  <button type="submit" id="btnSubmitFaktur" class="btn btn-primary">
+                    <i class="fa-solid fa-paper-plane"></i> Simpan & Kirim Penerimaan Barang
+                  </button>
+                </div>
+
+              </form>
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+    </div>
+
+    <!-- MOBILE BOTTOM NAVIGATION -->
+    <nav class="bottom-nav">
+      <button class="bottom-nav-item active" data-target="overview" data-roles="admin">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>Ringkasan</span>
+      </button>
+      <button class="bottom-nav-item" data-target="products" data-roles="admin">
+        <i class="fa-solid fa-cube"></i>
+        <span>Produk</span>
+      </button>
+      <button class="bottom-nav-item" data-target="producers" data-roles="admin">
+        <i class="fa-solid fa-industry"></i>
+        <span>Produsen</span>
+      </button>
+      <button class="bottom-nav-item" data-target="stock" data-roles="admin,asmen">
+        <i class="fa-solid fa-warehouse"></i>
+        <span>Stok</span>
+      </button>
+      <button class="bottom-nav-item" data-target="logistics" data-roles="admin,asmen">
+        <i class="fa-solid fa-truck-ramp-box"></i>
+        <span>Logistik</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL 1: PENGATURAN & SINKRONISASI DATABASE (3 TABS)    -->
+  <!-- ======================================================== -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <h3 class="modal-title"><i class="fa-solid fa-database"></i> Pengaturan Database & Google Drive</h3>
+          <p class="modal-subtitle">Kelola Link Database Core App, Sub-Database, Folder Drive & Sinkronisasi</p>
+        </div>
+        <button class="modal-close-btn" id="closeSettingsModalBtn" aria-label="Tutup Modal">&times;</button>
+      </div>
+
+      <!-- Modal Nav Tabs -->
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-modaltab="tab-core-app">
+          <i class="fa-solid fa-network-wired"></i> Database & Google Drive
+        </button>
+        <button class="modal-tab" data-modaltab="tab-manual-upload">
+          <i class="fa-solid fa-file-excel"></i> Upload File Manual (.xlsx)
+        </button>
+        <button class="modal-tab" data-modaltab="tab-db-status">
+          <i class="fa-solid fa-server"></i> Status & Pemeliharaan
+        </button>
+      </div>
+
+      <div class="modal-body">
+        
+        <!-- TAB 1: CORE APP & CLOUD SYNC -->
+        <div id="tab-core-app" class="modal-tab-content active">
+          
+          <div class="alert-info-box">
+            <i class="fa-solid fa-shield-halved alert-icon"></i>
+            <div>
+              <strong>Sistem Database Terpusat & Hardcoded Defaults</strong>
+              <p>Link Core App dan Apps Script sudah tertanam secara *hardcode* dalam sistem. Anda dapat menyesuaikan link folder Google Drive dan menimpa (*override*) link masing-masing sub-database secara mandiri di bawah ini.</p>
+            </div>
+          </div>
+
+          <!-- Section: Folder Google Drive Penyimpanan Foto / Dokumen -->
+          <div class="settings-subcard mb-4">
+            <div class="settings-subcard-title">
+              <i class="fa-brands fa-google-drive color-green"></i> Folder Google Drive Penyimpanan Foto & Dokumen
+            </div>
+            <div class="form-group">
+              <label for="inputDriveFolderUrl">
+                Link / ID Folder Google Drive: <span class="required">*</span>
+              </label>
+              <input type="text" id="inputDriveFolderUrl" placeholder="https://drive.google.com/drive/folders/1abcXYZ... atau ID Folder Drive" class="form-input">
+              <span class="form-hint">Seluruh foto STB dan lampiran dokumen bukti penerimaan barang akan disimpan otomatis ke dalam folder Drive ini.</span>
+            </div>
+          </div>
+
+          <!-- Section: Master Link Core App & Apps Script (Hardcoded with Edit Support) -->
+          <div class="settings-subcard mb-4">
+            <div class="settings-subcard-title">
+              <i class="fa-solid fa-server color-blue"></i> Konfigurasi Serverless Utama (Core App & GAS)
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="inputCoreAppUrl">
+                  <i class="fa-solid fa-file-spreadsheet"></i> Link Google Sheet Core App:
+                </label>
+                <input type="text" id="inputCoreAppUrl" placeholder="Link Spreadsheet Core App" class="form-input">
+                <span class="form-hint">Spreadsheet katalog master.</span>
+              </div>
+
+              <div class="form-group">
+                <label for="inputScriptUrl">
+                  <i class="fa-solid fa-code"></i> URL Web App Google Apps Script:
+                </label>
+                <input type="url" id="inputScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" class="form-input">
+                <span class="form-hint">Backend API Drive & Sheets.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Ubah Link Sub-Database Spesifik (Pengaturan Khusus Admin) -->
+          <div class="settings-subcard mb-4">
+            <div class="settings-subcard-title-between">
+              <div class="settings-subcard-title">
+                <i class="fa-solid fa-sliders color-purple"></i> Ubah Link Sub-Database Spesifik
+              </div>
+              <button type="button" id="btnResetToDefaultLinks" class="btn-xs btn-outline" title="Kembalikan link ke bawaan Core App">
+                <i class="fa-solid fa-rotate-left"></i> Reset ke Default Core App
+              </button>
+            </div>
+            <p class="settings-subcard-desc">Gunakan kolom di bawah jika Anda ingin mengarahkan Stok Opname, Daftar Harga, atau Faktur ke Spreadsheet terpisah secara spesifik:</p>
+
+            <div class="sub-db-inputs-list">
+              <div class="form-group mb-2">
+                <label for="inputDbStockUrl"><i class="fa-solid fa-warehouse"></i> Link Spreadsheet Stok Opname:</label>
+                <input type="text" id="inputDbStockUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit" class="form-input">
+              </div>
+
+              <div class="form-group mb-2">
+                <label for="inputDbPriceUrl"><i class="fa-solid fa-tags"></i> Link Spreadsheet Daftar Harga:</label>
+                <input type="text" id="inputDbPriceUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit" class="form-input">
+              </div>
+
+              <div class="form-group mb-2">
+                <label for="inputDbLogisticsUrl"><i class="fa-solid fa-truck"></i> Link Spreadsheet Faktur & Logistik:</label>
+                <input type="text" id="inputDbLogisticsUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit" class="form-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- Detected Database Links in Core App -->
+          <div class="detected-databases-box">
+            <div class="detected-db-header">
+              <span><i class="fa-solid fa-folder-tree"></i> Database Terdaftar di Core App:</span>
+              <span id="detectedCountBadge" class="badge badge-subtle">0 Terdeteksi</span>
+            </div>
+            <div class="detected-db-list" id="detectedDbList">
+              <div class="empty-detected">Belum ada database dimuat. Klik "Sinkronkan Semua Database" di bawah.</div>
+            </div>
+          </div>
+
+          <!-- Sync Progress Bar & Log Box -->
+          <div class="sync-progress-container" id="syncProgressContainer" style="display: none;">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" id="syncProgressBar" style="width: 0%;"></div>
+            </div>
+            <div class="progress-status-line">
+              <span id="syncProgressText">Menghubungkan ke Core App...</span>
+              <span id="syncProgressPercent">0%</span>
+            </div>
+            <div class="sync-log-box" id="syncLogBox">
+              <!-- Logs dynamically appended -->
+            </div>
+          </div>
+
+          <div class="modal-action-row">
+            <button id="btnSaveConfig" class="btn btn-outline">
+              <i class="fa-solid fa-floppy-disk"></i> Simpan Konfigurasi & Link
+            </button>
+            <button id="btnSyncAll" class="btn btn-primary">
+              <i class="fa-solid fa-arrows-rotate"></i> Sinkronkan Semua Database
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 2: UPLOAD FILE MANUAL (FALLBACK OFFLINE) -->
+        <div id="tab-manual-upload" class="modal-tab-content">
+          <p class="tab-desc">Jika Anda tidak memiliki koneksi internet atau ingin memuat file cadangan `.xlsx` dari komputer secara langsung, silakan upload file di bawah ini:</p>
+
+          <div class="manual-upload-grid">
+            
+            <!-- Upload Core App / All-in-one -->
+            <div class="manual-upload-card">
+              <div class="muc-header">
+                <i class="fa-solid fa-file-shield muc-icon"></i>
+                <div>
+                  <h5>File Core App Spreadsheet (.xlsx)</h5>
+                  <p>Berisi sheet <code>Core_App</code> yang mendaftar link file lainnya</p>
+                </div>
+              </div>
+              <input type="file" id="manualFileCoreApp" accept=".xlsx, .xls" class="file-input-manual">
+            </div>
+
+            <!-- Upload Stock Opname -->
+            <div class="manual-upload-card">
+              <div class="muc-header">
+                <i class="fa-solid fa-warehouse muc-icon"></i>
+                <div>
+                  <h5>File Stok Opname (.xlsx)</h5>
+                  <p>Berisi sheet bernama tanggal (DD-MM-YYYY) dengan data stok toko & gudang</p>
+                </div>
+              </div>
+              <input type="file" id="manualFileStock" accept=".xlsx, .xls" class="file-input-manual">
+            </div>
+
+            <!-- Upload Price List -->
+            <div class="manual-upload-card">
+              <div class="muc-header">
+                <i class="fa-solid fa-tag muc-icon"></i>
+                <div>
+                  <h5>File Daftar Harga (.xlsx)</h5>
+                  <p>Berisi kolom Produsen, Nama Produk, dan Harga Jual</p>
+                </div>
+              </div>
+              <input type="file" id="manualFilePrice" accept=".xlsx, .xls" class="file-input-manual">
+            </div>
+
+            <!-- Upload Logistics Invoices -->
+            <div class="manual-upload-card">
+              <div class="muc-header">
+                <i class="fa-solid fa-truck muc-icon"></i>
+                <div>
+                  <h5>File Faktur & Logistik (.xlsx)</h5>
+                  <p>Berisi sheet <code>Faktur_Header</code> dan <code>Faktur_Detail</code></p>
+                </div>
+              </div>
+              <input type="file" id="manualFileLogistics" accept=".xlsx, .xls" class="file-input-manual">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- TAB 3: STATUS DATABASE & PEMELIHARAAN -->
+        <div id="tab-db-status" class="modal-tab-content">
+          <div class="db-stats-grid">
+            <div class="db-stat-box">
+              <span class="stat-label">Sumber Data Aktif</span>
+              <strong class="stat-value" id="statusDataSource">IndexedDB (Lokal)</strong>
+            </div>
+            <div class="db-stat-box">
+              <span class="stat-label">Terakhir Disinkronkan</span>
+              <strong class="stat-value" id="statusLastSync">-</strong>
+            </div>
+            <div class="db-stat-box">
+              <span class="stat-label">Total Produk Terdaftar</span>
+              <strong class="stat-value" id="statusTotalProducts">0 Item</strong>
+            </div>
+            <div class="db-stat-box">
+              <span class="stat-label">Total Catatan Opname</span>
+              <strong class="stat-value" id="statusTotalOpnames">0 Hari</strong>
+            </div>
+            <div class="db-stat-box">
+              <span class="stat-label">Total Faktur Tersimpan</span>
+              <strong class="stat-value" id="statusTotalInvoices">0 Faktur</strong>
+            </div>
+            <div class="db-stat-box">
+              <span class="stat-label">Ukuran Database Cache</span>
+              <strong class="stat-value" id="statusStorageSize">Siap</strong>
+            </div>
+          </div>
+
+          <div class="maintenance-actions-box">
+            <h5 class="maintenance-title">Tindakan Pemeliharaan:</h5>
+            <div class="maintenance-buttons">
+              <button id="btnLoadDemoInModal" class="btn btn-outline-accent">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Muat Data Sampel Demo (Lengkap)
+              </button>
+              <button id="btnExportDbBackup" class="btn btn-outline">
+                <i class="fa-solid fa-file-export"></i> Ekspor Cadangan Data (JSON)
+              </button>
+              <button id="btnResetDatabase" class="btn btn-danger">
+                <i class="fa-solid fa-triangle-exclamation"></i> Kosongkan Data (Reset IndexedDB)
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL 2: DETAIL FAKTUR LOGISTIK                         -->
+  <!-- ======================================================== -->
+  <div id="invoiceDetailModal" class="modal-overlay">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-box">
+          <h3 class="modal-title" id="detailModalTitle"><i class="fa-solid fa-receipt"></i> Detail Penerimaan Faktur</h3>
+          <p class="modal-subtitle" id="detailModalSubtitle">Informasi lengkap pengiriman dan barang</p>
+        </div>
+        <button class="modal-close-btn" id="closeDetailModalBtn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Invoice Metadata Summary -->
+        <div class="invoice-summary-card">
+          <div class="inv-meta-grid">
+            <div class="inv-meta-item">
+              <span class="meta-label">ID Faktur:</span>
+              <strong class="meta-val" id="detIdFaktur">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Tanggal Diterima:</span>
+              <strong class="meta-val" id="detTglDiterima">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Nomor PO:</span>
+              <strong class="meta-val" id="detNoPo">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Nomor DO:</span>
+              <strong class="meta-val" id="detNoDo">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Pengirim:</span>
+              <strong class="meta-val highlight-val" id="detPengirim">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Nomor Polisi:</span>
+              <strong class="meta-val" id="detNopol">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Nama Sopir:</span>
+              <strong class="meta-val" id="detNamaSopir">-</strong>
+            </div>
+            <div class="inv-meta-item">
+              <span class="meta-label">Kontak Sopir:</span>
+              <strong class="meta-val" id="detKontakSopir">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Items Table in Modal -->
+        <div class="detail-section">
+          <h5 class="detail-section-title"><i class="fa-solid fa-boxes-packing"></i> Rincian Barang Diterima</h5>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">No</th>
+                  <th>Nama Barang</th>
+                  <th class="text-right">Qty Masuk</th>
+                  <th>Tanggal Expired</th>
+                  <th class="text-center">Status Kedaluwarsa</th>
+                </tr>
+              </thead>
+              <tbody id="detItemsTableBody">
+                <!-- Injected via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Photos Gallery in Modal -->
+        <div class="detail-section">
+          <h5 class="detail-section-title"><i class="fa-solid fa-images"></i> Bukti Foto STB & Dokumen Terlampir</h5>
+          <div class="detail-photos-grid" id="detPhotosGallery">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL 3: LIGHTBOX FOTO PREVIEW                          -->
+  <!-- ======================================================== -->
+  <div id="lightboxModal" class="lightbox-overlay">
+    <button class="lightbox-close" id="lightboxCloseBtn">&times;</button>
+    <div class="lightbox-content">
+      <img id="lightboxImg" src="" alt="Bukti Dokumen Foto Penuh">
+      <div class="lightbox-caption" id="lightboxCaption">-</div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- REAL LOGIN SCREEN (GATEWAY AUTHENTICATION)               -->
+  <!-- ======================================================== -->
+  <div id="loginScreen" class="login-screen-wrapper">
+    <div class="login-card-container">
+      <div class="login-card-header">
+        <div class="login-brand-logo">
+          <i class="fa-solid fa-boxes-stacked"></i>
+        </div>
+        <h1 class="login-brand-title">KDKMP PARANG</h1>
+        <p class="login-brand-subtitle">Dashboard Penjualan, Stok & Logistik Terpadu</p>
+      </div>
+
+      <!-- Login Error Alert Banner -->
+      <div id="loginErrorAlert" class="login-error-alert" style="display: none;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span id="loginErrorMessage">Username atau kata sandi tidak valid.</span>
+      </div>
+
+      <form id="realLoginForm" class="login-form-body" novalidate>
+        <div class="form-group mb-3">
+          <label for="loginUsernameInput">Username Pengguna:</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-user input-prefix-icon"></i>
+            <input type="text" id="loginUsernameInput" placeholder="Masukkan username" class="form-input with-prefix" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="form-group mb-3">
+          <label for="loginPasswordInput">Kata Sandi (Password):</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-lock input-prefix-icon"></i>
+            <input type="password" id="loginPasswordInput" placeholder="Masukkan kata sandi" class="form-input with-prefix with-suffix" required autocomplete="current-password">
+            <button type="button" id="btnTogglePassword" class="input-suffix-btn" title="Tampilkan / Sembunyikan Kata Sandi">
+              <i class="fa-solid fa-eye" id="togglePasswordIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="login-remember-row mb-4">
+          <label class="custom-checkbox-label">
+            <input type="checkbox" id="rememberMeCheck" checked>
+            <span>Ingat sesi login saya di perangkat ini</span>
+          </label>
+        </div>
+
+        <button type="submit" id="btnSubmitLogin" class="btn btn-primary btn-block btn-login-submit">
+          <i class="fa-solid fa-right-to-bracket"></i> Masuk ke Dashboard
+        </button>
+      </form>
+
+      <div class="login-card-footer">
+        <div class="security-info-line">
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>Sistem Informasi Terpadu &bull; Akses Terotentikasi</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- TOAST NOTIFICATIONS CONTAINER                           -->
+  <!-- ======================================================== -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
