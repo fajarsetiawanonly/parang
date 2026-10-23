@@ -9,13 +9,13 @@
 // HARDCODED DEFAULT CONFIGURATIONS (Baku & Otomatis)
 // ============================================================================
 const DEFAULT_CONFIG = {
-  CORE_APP_URL: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
+  CORE_APP_URL: "https://docs.google.com/spreadsheets/d/1AzFJskpym-jtj0USiDyX6WgWrol4JPFovNlBHCWW00g/edit?usp=sharing",
   SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxSLX_TLrB2mfuncaqrVW2f7lbIGrx6f5hsbKloVf5tJmYbhcRmraAQ-VW68rhIACPzFw/exec",
   DRIVE_FOLDER_URL: "https://drive.google.com/drive/folders/1b6OuJcrb8osa1VGVs9BEB3yySszrTkWj?usp=drive_link",
   DATABASES: {
-    stock_opname: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0",
-    daftar_harga: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=1",
-    faktur_logistik: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=2"
+    stock_opname: "https://docs.google.com/spreadsheets/d/18u-hFXEnEzPq2ZlHIeG09QDq0QDjsyNb/edit?usp=drive_link",
+    daftar_harga: "https://docs.google.com/spreadsheets/d/1bxh0Ji02UaUqQztJn566lMuG10CWfwL6/edit?usp=drive_link",
+    faktur_logistik: ""
   }
 };
 
@@ -316,7 +316,7 @@ function parseDateString(dateStr) {
     return new Date(y, m - 1, d);
   }
 
-  // DD-MM-YYYY or DD/MM/YYYY
+  // DD-MM-YYYY or D-M-YYYY or DD/MM/YY or D-M-YY
   const delimiterMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
   if (delimiterMatch) {
     let day = parseInt(delimiterMatch[1], 10);
@@ -326,11 +326,41 @@ function parseDateString(dateStr) {
     return new Date(year, month, day);
   }
 
-  // DDMMYY (e.g. 011024)
+  // 6 digits: DDMMYY (e.g. 011026) or D-M-YYYY (e.g. 772026)
   if (/^\d{6}$/.test(str)) {
-    const day = parseInt(str.substring(0, 2), 10);
-    const month = parseInt(str.substring(2, 4), 10) - 1;
-    const year = parseInt(str.substring(4, 6), 10) + 2000;
+    if (str.endsWith('2026') || str.endsWith('2025') || str.endsWith('2024')) {
+      const day = parseInt(str[0], 10);
+      const month = parseInt(str[1], 10) - 1;
+      const year = parseInt(str.substring(2), 10);
+      return new Date(year, month, day);
+    } else {
+      const day = parseInt(str.substring(0, 2), 10);
+      const month = parseInt(str.substring(2, 4), 10) - 1;
+      const year = parseInt(str.substring(4, 6), 10) + 2000;
+      return new Date(year, month, day);
+    }
+  }
+
+  // 5 digits: e.g. 24926 (24-9-26) or 41026 (4-10-26)
+  if (/^\d{5}$/.test(str)) {
+    const yr = parseInt(str.substring(3), 10) + 2000;
+    const d1 = parseInt(str.substring(0, 2), 10);
+    const m1 = parseInt(str.substring(2, 3), 10) - 1;
+    if (d1 >= 1 && d1 <= 31 && m1 >= 0 && m1 <= 11) {
+      return new Date(yr, m1, d1);
+    }
+    const d2 = parseInt(str.substring(0, 1), 10);
+    const m2 = parseInt(str.substring(1, 3), 10) - 1;
+    if (d2 >= 1 && d2 <= 9 && m2 >= 0 && m2 <= 11) {
+      return new Date(yr, m2, d2);
+    }
+  }
+
+  // 4 digits: e.g. 4826 (4-8-26)
+  if (/^\d{4}$/.test(str)) {
+    const day = parseInt(str[0], 10);
+    const month = parseInt(str[1], 10) - 1;
+    const year = parseInt(str.substring(2), 10) + 2000;
     return new Date(year, month, day);
   }
 
@@ -582,7 +612,9 @@ function consolidateProducts(priceListMap, stockRecords, salesRecords, sortedDat
 
 /**
  * 1. Parser Database Core App
- * Columns: key_database | nama_database | link_spreadsheet | keterangan
+ * Supports both:
+ * Format A (User's format): No | Nama Data (SO, Harga, Faktur) | Data (Google Sheet Link)
+ * Format B: key_database | nama_database | link_spreadsheet | keterangan
  */
 function parseCoreAppWorkbook(workbook) {
   const sheetName = workbook.SheetNames.find(n => n.toLowerCase().includes('core')) || workbook.SheetNames[0];
@@ -592,24 +624,60 @@ function parseCoreAppWorkbook(workbook) {
   const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   if (rawRows.length < 2) return [];
 
-  // Find header indices
-  const headers = rawRows[0].map(h => String(h || '').trim().toLowerCase());
-  const keyIdx = headers.findIndex(h => h.includes('key'));
-  const nameIdx = headers.findIndex(h => h.includes('nama'));
-  const linkIdx = headers.findIndex(h => h.includes('link') || h.includes('url') || h.includes('spreadsheet'));
-  const descIdx = headers.findIndex(h => h.includes('ket') || h.includes('desc'));
+  // Find header row (either row 0 or within first 5 rows)
+  let headerRowIdx = 0;
+  for (let r = 0; r < Math.min(rawRows.length, 5); r++) {
+    const row = (rawRows[r] || []).map(c => String(c || '').trim().toLowerCase());
+    if (row.some(c => c.includes('nama data') || c.includes('nama_database') || c.includes('key_database') || c === 'data')) {
+      headerRowIdx = r;
+      break;
+    }
+  }
 
   const catalog = [];
-  for (let i = 1; i < rawRows.length; i++) {
+  for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
     const row = rawRows[i];
-    if (!row || !row[keyIdx !== -1 ? keyIdx : 0]) continue;
+    if (!row || row.length < 2) continue;
 
-    catalog.push({
-      key_database: String(row[keyIdx !== -1 ? keyIdx : 0]).trim().toLowerCase(),
-      nama_database: String(row[nameIdx !== -1 ? nameIdx : 1] || '').trim(),
-      link_spreadsheet: String(row[linkIdx !== -1 ? linkIdx : 2] || '').trim(),
-      keterangan: String(row[descIdx !== -1 ? descIdx : 3] || '').trim()
-    });
+    const cells = row.map(c => String(c || '').trim());
+    const link = cells.find(c => c.startsWith('http://') || c.startsWith('https://')) || '';
+
+    // Search for label name (skip numeric index)
+    let label = '';
+    for (let c = 0; c < cells.length; c++) {
+      const val = cells[c];
+      if (val && !val.startsWith('http') && isNaN(Number(val))) {
+        label = val;
+        break;
+      }
+    }
+    if (!label && cells[0]) label = cells[0];
+
+    const lowerLabel = label.toLowerCase();
+    let key = '';
+    let displayName = label;
+
+    if (lowerLabel === 'so' || lowerLabel.includes('stok') || lowerLabel.includes('opname')) {
+      key = 'stock_opname';
+      displayName = 'Database Stok Opname (SO)';
+    } else if (lowerLabel === 'harga' || lowerLabel.includes('price')) {
+      key = 'daftar_harga';
+      displayName = 'Database Master Daftar Harga';
+    } else if (lowerLabel === 'faktur' || lowerLabel.includes('logistik') || lowerLabel.includes('invoice')) {
+      key = 'faktur_logistik';
+      displayName = 'Database Faktur & Logistik';
+    } else {
+      key = lowerLabel.replace(/[^a-z0-9_]/g, '_');
+    }
+
+    if (key) {
+      catalog.push({
+        key_database: key,
+        nama_database: displayName,
+        link_spreadsheet: link,
+        keterangan: cells.find(c => c !== label && c !== link && isNaN(Number(c))) || ''
+      });
+    }
   }
 
   return catalog;
@@ -617,7 +685,8 @@ function parseCoreAppWorkbook(workbook) {
 
 /**
  * 2. Parser Daftar Harga
- * Columns: Produsen | Nama Produk | Harga
+ * Columns: PRODUSEN | Nama Produk | Harga
+ * Handles merged/grouped producers across 262+ items (SAYAP MAS, INDOFOOD, UNILEVER, dll.)
  */
 function parsePriceListWorkbook(workbook) {
   const priceMap = new Map();
@@ -657,19 +726,23 @@ function parsePriceListWorkbook(workbook) {
     priceIdx = 2;
   }
 
+  let currentProducer = 'Umum';
   for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
     const row = rawRows[i];
     if (!row) continue;
 
     const productName = String(row[nameIdx] || '').trim();
-    if (!productName) continue;
+    if (!productName || productName.toLowerCase() === 'nama produk' || productName.toLowerCase() === 'total') continue;
 
-    const producer = prodIdx !== -1 && row[prodIdx] ? String(row[prodIdx]).trim() : 'Umum';
+    if (prodIdx !== -1 && row[prodIdx] && String(row[prodIdx]).trim() !== '') {
+      currentProducer = String(row[prodIdx]).trim();
+    }
+
     const price = cleanCurrency(row[priceIdx]);
 
     priceMap.set(productName, {
-      producer,
-      price
+      producer: currentProducer,
+      price: price
     });
   }
 
@@ -678,12 +751,8 @@ function parsePriceListWorkbook(workbook) {
 
 /**
  * 3. Parser Stock Opname
- * Multi-sheet, sheet names are dates (DD-MM-YYYY, DDMMYY, etc.)
- * Starts at row 7 (index 6, 0-indexed):
- * Col B (idx 1) = Nama Produk
- * Col C (idx 2) = Stok Toko
- * Col D (idx 3) = Stok Gudang
- * Col E (idx 4) = Total Stok
+ * Multi-sheet with dynamic date tabs (DD-MM-YYYY, DD/MM/YY, D-M-YY, etc.)
+ * Row headers: PRODUSEN | Nama Produk | Stok Groceries | Stok Warehouse | Total | ... | tanggal exiperd
  */
 function parseStockOpnameWorkbook(workbook) {
   const stockRecords = [];
@@ -698,9 +767,19 @@ function parseStockOpnameWorkbook(workbook) {
     if (!sheet) return;
 
     const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-    // Data starts at row 7 (index 6)
-    const startRow = 6;
+    if (rawRows.length < 6) return;
 
+    // Detect header row index
+    let startRow = 6;
+    for (let r = 0; r < Math.min(rawRows.length, 10); r++) {
+      const row = (rawRows[r] || []).map(c => String(c || '').trim().toLowerCase());
+      if (row.some(c => c.includes('nama produk') || c.includes('stok groceries') || c.includes('total'))) {
+        startRow = r + 1;
+        break;
+      }
+    }
+
+    let currentProducer = 'Umum';
     for (let r = startRow; r < rawRows.length; r++) {
       const row = rawRows[r];
       if (!row) continue;
@@ -708,16 +787,26 @@ function parseStockOpnameWorkbook(workbook) {
       const productName = String(row[1] || '').trim();
       if (!productName || productName.toLowerCase() === 'total' || productName.toLowerCase().includes('nama produk')) continue;
 
+      if (row[0] && String(row[0]).trim() !== '') {
+        currentProducer = String(row[0]).trim();
+      }
+
       const stokToko = Number(row[2]) || 0;
       const stokGudang = Number(row[3]) || 0;
-      const totalStok = Number(row[4]) || (stokToko + stokGudang);
+      const totalStok = (row[4] !== undefined && row[4] !== null && row[4] !== '') 
+        ? Number(row[4]) 
+        : (stokToko + stokGudang);
+
+      const expiredDate = row[9] ? String(row[9]).trim() : '';
 
       stockRecords.push({
         tgl_opname: stdDateStr,
+        produsen: currentProducer,
         nama_produk: productName,
         stok_toko: stokToko,
         stok_gudang: stokGudang,
-        total_stok: totalStok
+        total_stok: totalStok,
+        tgl_expired: expiredDate
       });
     }
   });
@@ -2115,6 +2204,8 @@ async function handleFakturFormSubmit(e) {
       kontak_sopir: kontakSopir,
       dibuat_oleh: `${AppState.currentUser.name} (${AppState.currentUser.role.toUpperCase()})`,
       drive_folder_url: AppState.config.driveFolderUrl || DEFAULT_CONFIG.DRIVE_FOLDER_URL,
+      faktur_spreadsheet_url: (AppState.config.databaseOverrides && AppState.config.databaseOverrides.faktur_logistik) || 
+        (AppState.databasesCatalog.find(c => c.key_database === 'faktur_logistik')?.link_spreadsheet) || '',
       stb_photo_base64: AppState.logisticsForm.stbPhoto.base64,
       stb_filename: AppState.logisticsForm.stbPhoto.name,
       other_photos: AppState.logisticsForm.otherDocsPhotos.map(p => ({

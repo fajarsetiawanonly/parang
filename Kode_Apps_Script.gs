@@ -31,21 +31,25 @@ const FOLDER_NAME_DRIVE = "KDKMP_Dokumen_Faktur";
 function initDatabaseStructure() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 1. Sheet Core_App
-  let sheetCore = ss.getSheetByName("Core_App");
+  // 1. Sheet Core_App (Format: No | Nama Data | Data)
+  let sheetCore = ss.getSheetByName("Core_App") || ss.getSheetByName("Sheet1");
   if (!sheetCore) {
     sheetCore = ss.insertSheet("Core_App");
-    const headersCore = ["key_database", "nama_database", "link_spreadsheet", "keterangan"];
-    sheetCore.appendRow(headersCore);
-    sheetCore.getRange("A1:D1").setFontWeight("bold").setBackground("#1f242c").setFontColor("#58a6ff");
-    
-    // Baris Contoh
-    sheetCore.appendRow(["stock_opname", "Database Stok Opname", ss.getUrl(), "Format sheet tanggal per minggu/bulan"]);
-    sheetCore.appendRow(["daftar_harga", "Database Daftar Harga", ss.getUrl(), "Kolom Produsen, Nama Produk, Harga"]);
-    sheetCore.appendRow(["faktur_logistik", "Database Faktur & Logistik", ss.getUrl(), "Sheet Faktur_Header & Faktur_Detail"]);
   }
 
-  // 2. Sheet Faktur_Header
+  // Jika sheet kosong, isi header dan baris sesuai format pengguna
+  if (sheetCore.getLastRow() === 0) {
+    const headersCore = ["No", "Nama Data", "Data"];
+    sheetCore.appendRow(headersCore);
+    sheetCore.getRange("A1:C1").setFontWeight("bold").setBackground("#1f242c").setFontColor("#58a6ff");
+    
+    // Baris Standar Sesuai Gambar Pengguna
+    sheetCore.appendRow([1, "SO", "https://docs.google.com/spreadsheets/d/18u-hFXEnEzPq2ZlHIeG09QDq0QDjsyNb/edit?usp=drive_link"]);
+    sheetCore.appendRow([2, "Harga", "https://docs.google.com/spreadsheets/d/1bxh0Ji02UaUqQztJn566lMuG10CWfwL6/edit?usp=drive_link"]);
+    sheetCore.appendRow([3, "Faktur", ss.getUrl()]);
+  }
+
+  // 2. Sheet Faktur_Header (Format Header Terstandarisasi)
   let sheetHeader = ss.getSheetByName("Faktur_Header");
   if (!sheetHeader) {
     sheetHeader = ss.insertSheet("Faktur_Header");
@@ -181,12 +185,28 @@ function doPost(e) {
         });
       }
 
-      // 4. Simpan ke Sheet Faktur_Header
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      // 4. Simpan ke Sheet Faktur_Header (Mendukung spreadsheet faktur custom atau spreadsheet aktif)
+      let ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (header.faktur_spreadsheet_url) {
+        const match = String(header.faktur_spreadsheet_url).match(/\/d\/([a-zA-Z0-9-_]+)/);
+        const ssId = match ? match[1] : header.faktur_spreadsheet_url.trim();
+        try {
+          ss = SpreadsheetApp.openById(ssId);
+        } catch (e) {
+          Logger.log("Menggunakan active spreadsheet: " + e.toString());
+        }
+      }
+
       let sheetH = ss.getSheetByName("Faktur_Header");
       if (!sheetH) {
-        initDatabaseStructure();
-        sheetH = ss.getSheetByName("Faktur_Header");
+        sheetH = ss.insertSheet("Faktur_Header");
+        const headersH = [
+          "id_faktur", "timestamp", "no_po", "no_do", "tgl_diterima", 
+          "pengirim", "nopol_pengirim", "nama_sopir", "kontak_sopir", 
+          "dibuat_oleh", "url_foto_stb", "url_foto_dokumen_lain", "total_jenis_barang", "total_qty_diterima"
+        ];
+        sheetH.appendRow(headersH);
+        sheetH.getRange("A1:N1").setFontWeight("bold").setBackground("#161b22").setFontColor("#3fb950");
       }
 
       const rowHeader = [
