@@ -10,8 +10,8 @@
 // ============================================================================
 const DEFAULT_CONFIG = {
   CORE_APP_URL: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
-  SCRIPT_URL: "https://script.google.com/macros/s/AKfycbz_KDKMP_PARANG_DEFAULT_EXEC/exec",
-  DRIVE_FOLDER_URL: "https://drive.google.com/drive/folders/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs",
+  SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxSLX_TLrB2mfuncaqrVW2f7lbIGrx6f5hsbKloVf5tJmYbhcRmraAQ-VW68rhIACPzFw/exec",
+  DRIVE_FOLDER_URL: "https://drive.google.com/drive/folders/1b6OuJcrb8osa1VGVs9BEB3yySszrTkWj?usp=drive_link",
   DATABASES: {
     stock_opname: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0",
     daftar_harga: "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=1",
